@@ -40,7 +40,7 @@ def test_sequence_from_xml():
         </sequence>
     """
     seq_block = XBlock.load(SEQ_HTML, Runtime)
-    print seq_block
-    1/0
+    assert_equals(seq_block.foo, u"bar")
+    assert_equals(len(seq_block.children), 2)
 
 # Questions: Logging
