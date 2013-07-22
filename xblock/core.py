@@ -12,6 +12,8 @@ try:
 except ImportError:
     import json
 from collections import namedtuple
+
+from xml.etree import ElementTree
 from webob import Response
 
 from .plugin import Plugin
@@ -698,6 +700,66 @@ class XBlock(Plugin):
         self.runtime = runtime
         self._model_data = model_data
         self._dirty_fields = set()
+
+
+    @classmethod
+    def load(cls, xml, runtime_cls, model_data=None, student_id=None):
+        """
+        Given a chunk of XML, a Runtime class, model_data, and a student_id,
+        return a completely initialized XBlock subclass.
+
+        `xml` is either a `basestring` with XML content, or an 
+
+        TODO:
+        * Selecting which XBlock class to load should be a runtime decision
+        * Default Runtime
+        * Default Model Data?
+
+        """
+        # Find the right class to load. This should probably be a Runtime
+        # System decision in the end?
+        if isinstance(xml, basestring):
+            root = ElementTree.fromstring(xml)
+        else:
+            root = xml # TODO: Make this smarter later
+        
+        block_cls = cls.load_class(root.tag)
+        runtime = runtime_cls() # block_cls, student ID at some point
+        
+        # Model data should come from the runtime?
+        model_data = model_data or {}
+
+        block = block_cls(runtime, model_data)
+
+        # FIXME: This definitely doesn't belong here... maybe as a method
+        #        in the Runtime? The incrementer is currently in Usage.
+        def register_child_func(block, child_xml_node):
+            return 1 # Yes, all children are getting ID of 1. Placeholder.
+
+        block.load_xml(root, register_child_func)
+
+        return block
+
+    def load_xml(self, xml, register_child_func=None):
+        # By default, all attributes get read in as 
+        # register_child_func should take this block and an XML node, and
+        # return an ID that we can append to our children
+        #
+        # Is it ever valid to load_xml and not pass it a register_child_func?
+        # Maybe when you know it's not going to have children... in which case
+        # it should throw an exception if it doesn't find any?
+        self.load_attributes(xml.attrib)
+
+        if self.has_children:
+            for child_node in xml:
+                self.children.append(register_child_func(self, child_node))
+
+
+    def load_attributes(self, attrib):
+        for attr_name, attr_val in attrib.items():
+            # We assign if there are already model attributes for this
+            if hasattr(self, attr_name):
+                setattr(self, attr_name, attr_val)
 
     def __repr__(self):
         # `XBlock` obtains the `fields` attribute from the `ModelMetaclass`.

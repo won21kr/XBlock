@@ -1,11 +1,14 @@
 """Structure-oriented XBlocks."""
 
-from .core import XBlock
+from .core import XBlock, Scope, String
 from .fragment import Fragment
 
 
 class Sequence(XBlock):
     has_children = True
+
+    # FIXME: Just to make sure the default attribute assignment works
+    foo = String(help="The HTML to display", scope=Scope.content, default=u"DEFAULT")
 
     def student_view(self, context):
         frag = Fragment()

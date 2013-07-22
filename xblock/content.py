@@ -1,5 +1,5 @@
 """Content-oriented XBlocks."""
-
+from xml.etree import ElementTree
 from string import Template
 
 from .core import XBlock, String, Scope
@@ -24,3 +24,9 @@ class HtmlBlock(XBlock):
 
     def fallback_view(self, view_name, context):
         return Fragment(Template(self.content).substitute(**context))
+
+    def load_xml(self, xml, register_child_func=None):
+        root_tag_len = len(xml.tag)
+        full_xml_str = ElementTree.tostring(xml, encoding='utf-8')
+        content_str = full_xml_str[root_tag_len + 2:-(root_tag_len + 3)]
+        self.content = unicode(content_str, encoding='utf-8').strip()

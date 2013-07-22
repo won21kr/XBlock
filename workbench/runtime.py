@@ -20,7 +20,7 @@ from xblock.core import XBlock, Scope, ModelType
 from xblock.runtime import DbModel, KeyValueStore, Runtime, NoSuchViewError
 from xblock.fragment import Fragment
 
-from .util import make_safe_for_html
+from workbench.util import make_safe_for_html
 
 log = logging.getLogger(__name__)
 
@@ -280,6 +280,7 @@ class WorkbenchRuntime(Runtime):
             self.usage
         )
         data[key] = value
+
 
 
 class _BlockSet(object):

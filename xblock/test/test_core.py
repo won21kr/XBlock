@@ -639,3 +639,4 @@ def test_xblock_write_then_delete():
     assert_equals(len(field_tester._model_data), 0)
     assert_equals(False, 'field_a' in field_tester._model_data)
     assert_equals(False, 'field_b' in field_tester._model_data)
+
