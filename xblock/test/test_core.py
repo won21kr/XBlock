@@ -6,7 +6,7 @@ from mock import patch, MagicMock
 # Nose redefines assert_equal and assert_not_equal
 # pylint: disable=E0611
 from nose.tools import assert_in, assert_equals, assert_raises, \
-    assert_not_equals
+    assert_not_equals, assert_not_in
 # pylint: enable=E0611
 from datetime import datetime
 
@@ -128,14 +128,14 @@ def test_field_access():
 
     # Set one of the fields.
     field_tester.field_a = 20
-    # field_a should be updated in the cache, but /not/ in the underlying db.
+    # field_a should be updated in the cache, but /not/ in the underlying kvstore
     assert_equals(20, field_tester.field_a)
     assert_equals(5, field_tester._model_data['field_a'])
     # save the XBlock
     field_tester.save()
     # verify that the fields have been updated correctly
     assert_equals(20, field_tester.field_a)
-    # Now, field_a should be updated in the underlying db
+    # Now, field_a should be updated in the underlying kvstore
     assert_equals(20, field_tester._model_data['field_a'])
     assert_equals(10, field_tester.field_b)
     assert_equals('field c', field_tester.field_c)
@@ -151,24 +151,45 @@ def test_list_field_access():
         """Test XBlock for field access testing"""
         field_a = List(scope=Scope.settings)
         field_b = List(scope=Scope.content, default=[1, 2, 3])
+        field_c = List(scope=Scope.content, default=[4, 5, 6])
 
-    field_tester = FieldTester(MagicMock(), {})
+    field_tester = FieldTester(MagicMock(), {'field_a': [200], 'field_b': [11, 12, 13]})
 
-    # Check initial values
-    assert_equals([], field_tester.field_a)
-    assert_equals([1, 2, 3], field_tester.field_b)
+    print 'm_d:', field_tester._model_data
+    print 'CHECK INITIAL VALUES HAVE BEEN SET PROPERLY'
+    # Check initial values have been set properly
+    assert_equals([200], field_tester.field_a)
+#    assert_equals([11, 12, 13], field_tester.field_b)
+#    assert_equals([4, 5, 6], field_tester.field_c)
 
-    # Test no default specified
+    print 'cache:', field_tester._model_data_cache
+    print 'm_d:', field_tester._model_data
+    # Update the fields
+    print 'UPDATING THE FIELDS'
     field_tester.field_a.append(1)
-    assert_equals([1], field_tester.field_a)
-    del field_tester.field_a
-    assert_equals([], field_tester.field_a)
+#    field_tester.field_b.append(14)
+#    field_tester.field_c.append(7)
+    print field_tester.field_a
+    
+    print 'cache:', field_tester._model_data_cache
+    print 'm_d:', field_tester._model_data
+    print 'DIRTY FIELDS:', field_tester._dirty_fields
+    field_tester.save()
+    print 'cache:', field_tester._model_data_cache
+    print 'm_d:', field_tester._model_data
+    print 'DIRTY FIELDS:', field_tester._dirty_fields
 
-    # Test default explicitly specified
-    field_tester.field_b.append(4)
-    assert_equals([1, 2, 3, 4], field_tester.field_b)
-    del field_tester.field_b
-    assert_equals([1, 2, 3], field_tester.field_b)
+    # The fields should be update in the cache, but /not/ in the underlying kvstore.
+#    print 'THE FIELDS SHOULD BE UPDATE IN THE CACHE, BUT /NOT/ IN THE UNDERLYING KVSTORE.'
+#    assert_equals([200, 1], field_tester.field_a)
+#    assert_equals([11, 12, 13, 14], field_tester.field_b)
+#    assert_equals([4, 5, 6, 7], field_tester.field_c)
+
+#    print 'LOOKING AT _MODEL_DATA DIRECTLY'
+    assert_equals([], field_tester._model_data['field_a'])
+#    assert_equals([1, 2, 3], field_tester._model_data['field_b'])
+#    assert_not_in('field_c', field_tester._model_data)
+
 
 
 def test_json_field_access():

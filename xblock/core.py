@@ -137,6 +137,7 @@ class ModelType(object):
           that generates the valid values. For example formats, see the
           values property definition.
     """
+    MUTABLE = True
 
     # We're OK redefining built-in `help`
     # pylint: disable=W0622
@@ -204,6 +205,7 @@ class ModelType(object):
         """Store a value in the instance's cache, creating the cache if necessary."""
         # Allow this method to access the `_model_data_cache` of `instance`
         # pylint: disable=W0212
+        print "\nSetting cached value; {0}:{1}\n".format(self.name, value)
         if not hasattr(instance, '_model_data_cache'):
             instance._model_data_cache = {}
         instance._model_data_cache[self.name] = value
@@ -227,20 +229,32 @@ class ModelType(object):
         obtaining the value from the _model_data. Thus if a cached value
         exists, that is the value that will be returned.
         """
-        # Allow this method to access the `_model_data_cache` of `instance`
+        # Allow this method to access the `_model_data` of `instance`
         # pylint: disable=W0212
+        print '  inside __get__'
         if instance is None:
             return self
 
         value = self._get_cached_value(instance)
+        if value is not NO_CACHE_VALUE: print '    Found cached value of:', value
         if value is NO_CACHE_VALUE:
             try:
-                value = self.from_json(instance._model_data[self.name])
+                if isinstance(self, ImmutableModelType):
+                    value = self.from_json(instance._model_data[self.name])
+                else:
+                    value = copy.deepcopy(self.from_json(instance._model_data[self.name]))
+                print '    No value found, obtained value', value
+                # 
                 self._set_cached_value(instance, value)
             except KeyError:
-                # Defaults are always copied, in case the provided default value
-                # is mutable (e.g list or dict).  Defaults are also cached.
-                value = copy.deepcopy(self.default)
+                if isinstance(self, ImmutableModelType):
+                    value = self.default
+                else:
+                    # Copy the defaults in the case where the provided default value
+                    # is mutable (e.g list or dict).
+                    value = copy.deepcopy(self.default)
+                print '    Hit exception, cached value', value
+                # Defaults are also cached.
                 self._set_cached_value(instance, value)
 
         return value
@@ -254,6 +268,7 @@ class ModelType(object):
         """
         # Mark the field as dirty and update the cache:
         self._mark_dirty(instance)
+        print "Marking dirty & setting cached value"
         self._set_cached_value(instance, value)
 
     def __delete__(self, instance):
@@ -338,7 +353,13 @@ class ModelType(object):
         return self.name == other.name
 
 
-class Integer(ModelType):
+class ImmutableModelType(ModelType):
+    """
+    Base class for immutable model types (Integer, Float, String, Boolean)
+    """
+    MUTABLE = False
+
+class Integer(ImmutableModelType):
     """
     A model type that contains an integer.
 
@@ -354,7 +375,7 @@ class Integer(ModelType):
         return int(value)
 
 
-class Float(ModelType):
+class Float(ImmutableModelType):
     """
     A model type that contains a float.
 
@@ -367,7 +388,7 @@ class Float(ModelType):
         return float(value)
 
 
-class Boolean(ModelType):
+class Boolean(ImmutableModelType):
     """
     A field class for representing a boolean.
 
@@ -385,6 +406,7 @@ class Boolean(ModelType):
 
     This class has the 'values' property defined.
     """
+
     # We're OK redefining built-in `help`
     # pylint: disable=W0622
     def __init__(self, help=None, default=None, scope=Scope.content, display_name=None):
@@ -434,13 +456,16 @@ class List(ModelType):
             return self._default
 
     def from_json(self, value):
+        print '      In List.from_json',
         if value is None or isinstance(value, list):
+            print 'returning value:', value, '\n'
             return value
         else:
+            print 'hit TypeError'
             raise TypeError('Value stored in an Object must be None or a list.')
 
 
-class String(ModelType):
+class String(ImmutableModelType):
     """
     A field class for representing a string.
 
@@ -477,14 +502,17 @@ class ModelMetaclass(type):
         # Allow this method to access `_name`
         # pylint: disable=W0212
         fields = set()
+        field_names = {}
         for aname, value in attrs.items() + \
                 sum([inspect.getmembers(base) for base in bases], []):
             if isinstance(value, ModelType):
                 # Set the name of this attribute
                 value._name = aname
                 fields.add(value)
+                field_names[aname] = value
 
         attrs['fields'] = list(fields)
+        attrs['field_names'] = field_names
         return super(ModelMetaclass, mcs).__new__(mcs, name, bases, attrs)
 
 
@@ -696,7 +724,20 @@ class XBlock(Plugin):
 
         """
         self.runtime = runtime
-        self._model_data = model_data
+        
+        self._model_data = {}
+
+        for name, value in model_data.iteritems(): ## SARINA here
+            field = self.field_names.get(name, None)
+
+            if isinstance(field, ImmutableModelType):
+                self._model_data[name] = value
+            elif field is not None:
+                # Copy the defaults in the case where the provided default value
+                # is mutable (e.g list or dict).
+                print 'Here!! with field', name
+                self._model_data[name] = copy.deepcopy(value)
+
         self._dirty_fields = set()
 
     def __repr__(self):
