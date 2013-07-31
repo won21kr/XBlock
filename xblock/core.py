@@ -231,7 +231,7 @@ class ModelType(object):
         """
         # Allow this method to access the `_model_data` of `instance`
         # pylint: disable=W0212
-        print '  inside __get__'
+        print '  inside __get__',
         if instance is None:
             return self
 
@@ -242,9 +242,9 @@ class ModelType(object):
                 if isinstance(self, ImmutableModelType):
                     value = self.from_json(instance._model_data[self.name])
                 else:
+                    # Cache a copy of the object in the model data
                     value = copy.deepcopy(self.from_json(instance._model_data[self.name]))
                 print '    No value found, obtained value', value
-                # 
                 self._set_cached_value(instance, value)
             except KeyError:
                 if isinstance(self, ImmutableModelType):
@@ -268,7 +268,7 @@ class ModelType(object):
         """
         # Mark the field as dirty and update the cache:
         self._mark_dirty(instance)
-        print "Marking dirty & setting cached value"
+        print "Marking '{0}' dirty & setting cached value of '{1}'".format(self.name, value)
         self._set_cached_value(instance, value)
 
     def __delete__(self, instance):
@@ -724,21 +724,11 @@ class XBlock(Plugin):
 
         """
         self.runtime = runtime
-        
-        self._model_data = {}
+        self._dirty_fields = set()        
+        self._model_data = model_data
 
-        for name, value in model_data.iteritems(): ## SARINA here
-            field = self.field_names.get(name, None)
-
-            if isinstance(field, ImmutableModelType):
-                self._model_data[name] = value
-            elif field is not None:
-                # Copy the defaults in the case where the provided default value
-                # is mutable (e.g list or dict).
-                print 'Here!! with field', name
-                self._model_data[name] = copy.deepcopy(value)
-
-        self._dirty_fields = set()
+        if model_data is not None and len(model_data) > 0:
+            self.copy_default_model_data(model_data)
 
     def __repr__(self):
         # `XBlock` obtains the `fields` attribute from the `ModelMetaclass`.
@@ -757,6 +747,30 @@ class XBlock(Plugin):
             id(self) % 0xFFFF,
             ','.join(attrs)
         )
+
+    def copy_default_model_data(self, model_data):
+        """
+        Takes the user-provided `model_data`, and makes a copy of any mutable
+        values that are set, so we put copies into the underlying kvstore.
+        """
+        self._model_data = {}
+        print 'model data:', model_data
+        # Go through each name in the model_data
+        for name in model_data:
+            value = model_data.get(name, None)
+            # If no value is actually set in the user-provided `model_data`, skip
+            # so that future lookups will fall back to, and cache, the default value.
+            if value is None:
+                continue
+            field = self.field_names.get(name, None)
+            # Check if the field is immutable
+            if isinstance(field, ImmutableModelType):
+                self._model_data[name] = value
+            else:
+                # Copy the defaults in the case where the provided default value
+                # is mutable (e.g list or dict)
+                self._model_data[name] = copy.deepcopy(value)
+
 
     def save(self):
         """Save all dirty fields attached to this XBlock."""

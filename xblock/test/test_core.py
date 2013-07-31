@@ -155,41 +155,37 @@ def test_list_field_access():
 
     field_tester = FieldTester(MagicMock(), {'field_a': [200], 'field_b': [11, 12, 13]})
 
-    print 'm_d:', field_tester._model_data
-    print 'CHECK INITIAL VALUES HAVE BEEN SET PROPERLY'
     # Check initial values have been set properly
     assert_equals([200], field_tester.field_a)
-#    assert_equals([11, 12, 13], field_tester.field_b)
-#    assert_equals([4, 5, 6], field_tester.field_c)
+    assert_equals([11, 12, 13], field_tester.field_b)
+    assert_equals([4, 5, 6], field_tester.field_c)
 
-    print 'cache:', field_tester._model_data_cache
-    print 'm_d:', field_tester._model_data
     # Update the fields
-    print 'UPDATING THE FIELDS'
     field_tester.field_a.append(1)
-#    field_tester.field_b.append(14)
-#    field_tester.field_c.append(7)
-    print field_tester.field_a
+    field_tester.field_b.append(14)
+    field_tester.field_c.append(7)
     
-    print 'cache:', field_tester._model_data_cache
-    print 'm_d:', field_tester._model_data
-    print 'DIRTY FIELDS:', field_tester._dirty_fields
-    field_tester.save()
-    print 'cache:', field_tester._model_data_cache
-    print 'm_d:', field_tester._model_data
-    print 'DIRTY FIELDS:', field_tester._dirty_fields
-
     # The fields should be update in the cache, but /not/ in the underlying kvstore.
-#    print 'THE FIELDS SHOULD BE UPDATE IN THE CACHE, BUT /NOT/ IN THE UNDERLYING KVSTORE.'
-#    assert_equals([200, 1], field_tester.field_a)
-#    assert_equals([11, 12, 13, 14], field_tester.field_b)
-#    assert_equals([4, 5, 6, 7], field_tester.field_c)
+    assert_equals([200, 1], field_tester.field_a)
+    assert_equals([11, 12, 13, 14], field_tester.field_b)
+    assert_equals([4, 5, 6, 7], field_tester.field_c)
 
-#    print 'LOOKING AT _MODEL_DATA DIRECTLY'
-    assert_equals([], field_tester._model_data['field_a'])
-#    assert_equals([1, 2, 3], field_tester._model_data['field_b'])
-#    assert_not_in('field_c', field_tester._model_data)
-
+    # Examine model data directly
+    assert_equals([200], field_tester._model_data['field_a'])
+    assert_equals([11, 12, 13], field_tester._model_data['field_b'])
+    assert_not_in('field_c', field_tester._model_data)
+    # save the XBlock
+    field_tester.save()
+    # verify that the fields have been updated correctly
+    assert_equals([200, 1], field_tester.field_a)
+    assert_equals([11, 12, 13, 14], field_tester.field_b)
+    assert_equals([4, 5, 6, 7], field_tester.field_c)
+    # Now, the fields should be updated in the underlying kvstore
+    # TODO [sarina]: Currently, this is expected to fail as save isn't working with mutable types.
+    print "TODO [sarina]: Currently, this is expected to fail as save isn't working with mutable types."
+    assert_equals([200, 1], field_tester._model_data['field_a'])
+    assert_equals([11, 12, 13, 14], field_tester._model_data['field_b'])
+    assert_equals([4, 5, 6, 7], field_tester._model_data['field_c'])
 
 
 def test_json_field_access():
@@ -563,13 +559,12 @@ def test_xblock_save_one():
     # Mimics a save failure when we only manage to save one of the values
 
     # Pylint, please allow this method to accept arguments.
-    # pylint: disable=W0613
-    def fake_update(*args, **kwargs):
+    def fake_update(*args, **kwargs):  # pylint: disable=W0613
         """Mock update method that throws a KeyValueMultiSaveError indicating
            that only one field was correctly saved."""
         other_dict = args[0]
+        print 'inside fake_update'
         raise KeyValueMultiSaveError([other_dict.keys()[0]])
-    # pylint: enable=W0613
 
     field_tester = setup_save_failure(fake_update)
 
