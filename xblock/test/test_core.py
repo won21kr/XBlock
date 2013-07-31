@@ -6,11 +6,11 @@ from mock import patch, MagicMock
 # Nose redefines assert_equal and assert_not_equal
 # pylint: disable=E0611
 from nose.tools import assert_in, assert_equals, assert_raises, \
-    assert_not_equals
+    assert_not_equals, assert_not_in
 # pylint: enable=E0611
 from datetime import datetime
 
-from xblock.core import Boolean, ChildrenModelMetaclass, Integer, \
+from xblock.core import Boolean, ChildrenModelMetaclass, Dict, Integer, \
     KeyValueMultiSaveError, List, ModelMetaclass, ModelType, \
     Namespace, NamespacesMetaclass, Scope, String, XBlock, XBlockSaveError
 
@@ -151,24 +151,104 @@ def test_list_field_access():
         """Test XBlock for field access testing"""
         field_a = List(scope=Scope.settings)
         field_b = List(scope=Scope.content, default=[1, 2, 3])
+        field_c = List(scope=Scope.content, default=[4, 5, 6])
+        field_d = List(scope=Scope.settings)
 
-    field_tester = FieldTester(MagicMock(), {})
+    field_tester = FieldTester(MagicMock(), {'field_a': [200], 'field_b': [11, 12, 13]})
 
-    # Check initial values
-    assert_equals([], field_tester.field_a)
-    assert_equals([1, 2, 3], field_tester.field_b)
+    # Check initial values have been set properly
+    assert_equals([200], field_tester.field_a)
+    assert_equals([11, 12, 13], field_tester.field_b)
+    assert_equals([4, 5, 6], field_tester.field_c)
+    assert_equals([], field_tester.field_d)
 
-    # Test no default specified
+    # Update the fields
     field_tester.field_a.append(1)
-    assert_equals([1], field_tester.field_a)
-    del field_tester.field_a
-    assert_equals([], field_tester.field_a)
+    field_tester.field_b.append(14)
+    field_tester.field_c.append(7)
+    field_tester.field_d.append(1)
+    
+    # The fields should be update in the cache, but /not/ in the underlying kvstore.
+    assert_equals([200, 1], field_tester.field_a)
+    assert_equals([11, 12, 13, 14], field_tester.field_b)
+    assert_equals([4, 5, 6, 7], field_tester.field_c)
+    assert_equals([1], field_tester.field_d)
 
-    # Test default explicitly specified
-    field_tester.field_b.append(4)
-    assert_equals([1, 2, 3, 4], field_tester.field_b)
-    del field_tester.field_b
-    assert_equals([1, 2, 3], field_tester.field_b)
+    # Examine model data directly
+    ## Caveat: there's not a clean way to copy the originally provided values for `field_a` and `field_b`
+    ## when we instantiate the XBlock. So, the values for those two in both `_model_data` and `_model_data_cache`
+    ## point at the same object. Thus, `field_a` and `field_b` actually have the correct values in
+    ## `_model_data` right now. `field_c` does not, because it has never been written to the `_model_data`.
+    assert_not_in('field_c', field_tester._model_data)
+    assert_not_in('field_d', field_tester._model_data)
+
+    # save the XBlock
+    field_tester.save()
+
+    # verify that the fields have been updated correctly
+    assert_equals([200, 1], field_tester.field_a)
+    assert_equals([11, 12, 13, 14], field_tester.field_b)
+    assert_equals([4, 5, 6, 7], field_tester.field_c)
+    assert_equals([1], field_tester.field_d)
+    # Now, the fields should be updated in the underlying kvstore
+    # TODO [sarina]: Currently, this is expected to fail as save isn't working with mutable types.
+    print "TODO [sarina]: Currently, this is expected to fail as save isn't working with mutable types."
+    assert_equals([200, 1], field_tester._model_data['field_a'])
+    assert_equals([11, 12, 13, 14], field_tester._model_data['field_b'])
+    assert_equals([4, 5, 6, 7], field_tester._model_data['field_c'])
+    assert_equals([1], field_tester._model_data['field_d'])
+
+def test_dict_field_access():
+    # Check that values that are deleted are restored to their default values
+    class FieldTester(XBlock):
+        """Test XBlock for field access testing"""
+        field_a = Dict(scope=Scope.settings)
+        field_b = Dict(scope=Scope.content, default={'a': 1, 'b': 2, 'c': 3})
+        field_c = Dict(scope=Scope.content, default={'a': 4, 'b': 5, 'c': 6})
+        field_d = Dict(scope=Scope.settings)
+
+    field_tester = FieldTester(MagicMock(), {'field_a': {'a': 200}, 'field_b': {'a': 11, 'b': 12, 'c': 13}})
+
+    # Check initial values have been set properly
+    assert_equals({'a': 200}, field_tester.field_a)
+    assert_equals({'a': 11, 'b': 12, 'c': 13}, field_tester.field_b)
+    assert_equals({'a': 4, 'b': 5, 'c': 6}, field_tester.field_c)
+    assert_equals({}, field_tester.field_d)
+
+    # Update the fields
+    field_tester.field_a['a'] = 250
+    field_tester.field_b['d'] = 14
+    field_tester.field_c['a'] = 0
+    field_tester.field_d['new'] = 'value'
+
+    # The fields should be update in the cache, but /not/ in the underlying kvstore.
+    assert_equals({'a': 250}, field_tester.field_a)
+    assert_equals({'a': 11, 'b': 12, 'c': 13, 'd': 14}, field_tester.field_b)
+    assert_equals({'a': 0, 'b': 5, 'c': 6}, field_tester.field_c)
+    assert_equals({'new': 'value'}, field_tester.field_d)
+
+    # Examine model data directly
+    ## Caveat: there's not a clean way to copy the originally provided values for `field_a` and `field_b`
+    ## when we instantiate the XBlock. So, the values for those two in both `_model_data` and `_model_data_cache`
+    ## point at the same object. Thus, `field_a` and `field_b` actually have the correct values in
+    ## `_model_data` right now. `field_c` does not, because it has never been written to the `_model_data`.
+    assert_not_in('field_c', field_tester._model_data)
+    assert_not_in('field_d', field_tester._model_data)
+
+    field_tester.save()
+    # verify that the fields have been updated correctly
+    assert_equals({'a': 250}, field_tester.field_a)
+    assert_equals({'a': 11, 'b': 12, 'c': 13, 'd': 14}, field_tester.field_b)
+    assert_equals({'a': 0, 'b': 5, 'c': 6}, field_tester.field_c)
+    assert_equals({'new': 'value'}, field_tester.field_d)
+
+    # Now, the fields should be updated in the underlying kvstore
+    # TODO [sarina]: Currently, this is expected to fail as save isn't working with mutable types.
+    print "TODO [sarina]: Currently, this is expected to fail as save isn't working with mutable types."
+    assert_equals({'a': 250}, field_tester._model_data['field_a'])
+    assert_equals({'a': 11, 'b': 12, 'c': 13, 'd': 14}, field_tester._model_data['field_b'])
+    assert_equals({'a': 0, 'b': 5, 'c': 6}, field_tester._model_data['field_c'])
+    assert_equals({'new': 'value'}, field_tester._model_data['field_d'])
 
 
 def test_json_field_access():
